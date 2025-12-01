@@ -2,13 +2,17 @@ name: Relatório Diário Invest-AI
 
 on:
   schedule:
-    # 13:00 BRT é 16:00 UTC (ajuste conforme horário de verão)
-    - cron: '0 16 * * 1-5' # Roda às 16:00 UTC (13:00 BRT) de Seg a Sex
-  workflow_dispatch: # Permite rodar manualmente clicando num botão
+    - cron: '0 16 * * 1-5' # 13:00 Horário de Brasília (ajuste se necessário)
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    
+    # Permissões para o robô poder salvar (commit) as alterações no histórico
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout do código
         uses: actions/checkout@v3
@@ -30,3 +34,12 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           LOG_LEVEL: INFO
         run: python main.py --test
+
+      # --- NOVO PASSO: SALVAR HISTÓRICO ---
+      - name: Salvar Histórico e Estado
+        run: |
+          git config --global user.name 'Invest-AI Bot'
+          git config --global user.email 'bot@invest-ai.com'
+          git add data/history.json data/rdb_state.json
+          # Só faz commit se houver mudanças
+          git diff --quiet && git diff --staged --quiet || (git commit -m "🤖 Atualizando histórico diário" && git push)
