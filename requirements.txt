@@ -1,0 +1,12 @@
+yfinance
+pandas
+requests
+beautifulsoup4
+python-dotenv
+schedule
+reportlab
+openpyxl
+twilio
+
+google-generativeai
+markdown

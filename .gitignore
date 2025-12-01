@@ -1,0 +1,33 @@
+# --- Segurança (CRÍTICO) ---
+# Ignora o arquivo com sua Chave de API do Google
+.env
+
+# --- Python ---
+# Arquivos compilados e cache (não devem ir para o GitHub)
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- Ambientes Virtuais ---
+# Caso você use venv no futuro
+venv/
+.venv/
+env/
+# --- Arquivos do Projeto (Específicos) ---
+# Ignora os vídeos gravados (são pesados e contêm dados sensíveis)
+data/*.mp4
+data/*.avi
+data/
+
+# Ignora todos os arquivos na pasta reports
+reports/
+
+# --- Logs e Banco de Dados ---
+*.log
+*.sqlite3
+
+# Configurações do VS Code e outros
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
