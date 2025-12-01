@@ -65,14 +65,14 @@ class ReportGenerator:
         # Agrupa por categoria
         data = portfolio_df.groupby('category')['value_brl'].sum()
         
-        # Configurações visuais modernas
+        # Configurações visuais
         colors_list = ['#ff9999','#66b3ff','#99ff99','#ffcc99', '#c2c2f0', '#ffb3e6', '#c4e17f']
         plt.figure(figsize=(6, 6))
         
-        # Gráfico de Rosca (Donut)
+        # Gráfico
         plt.pie(data, labels=data.index, colors=colors_list[:len(data)], autopct='%1.1f%%', startangle=90, pctdistance=0.85)
         
-        # Círculo branco no meio
+        # Círculo branco (Donut)
         centre_circle = plt.Circle((0,0),0.70,fc='white')
         fig = plt.gcf()
         fig.gca().add_artist(centre_circle)
@@ -80,12 +80,14 @@ class ReportGenerator:
         plt.title('Alocação Atual da Carteira')
         plt.tight_layout()
         
-        # Save to BytesIO buffer
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png')
-        buf.seek(0)
+        # --- A MÁGICA ACONTECE AQUI ---
+        # Em vez de salvar em arquivo, salvamos na memória (buffer)
+        buffer = io.BytesIO()
+        plt.savefig(buffer, format='png')
         plt.close()
+        buffer.seek(0)
         
-        # Encode to Base64
-        chart_b64 = base64.b64encode(buf.read()).decode('utf-8')
-        return chart_b64
+        # Converte para Base64 string
+        image_png = buffer.getvalue()
+        graphic = base64.b64encode(image_png)
+        return graphic.decode('utf-8')
