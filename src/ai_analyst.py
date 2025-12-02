@@ -25,39 +25,49 @@ class AIAnalyst:
         except Exception as e:
             logger.warning(f"Could not list models: {e}")
 
-    def generate_ai_analysis(self, portfolio_df, total_value, indicators):
+    def generate_ai_analysis(self, portfolio_df, total_value, indicators, news_summary):
         if not self.api_key:
             return "Análise de IA indisponível (Chave API não configurada)."
-
-        # Prepare Data for AI
         portfolio_summary = portfolio_df.to_dict(orient='records')
-        
-        # Create a simplified summary to save tokens and focus attention
-        # Create a simplified summary to save tokens and focus attention
+
         summary_text = f"Valor Total: R$ {total_value:,.2f}\n"
         summary_text += f"Indicadores: Selic {indicators.get('selic_meta')}% | CDI {indicators.get('cdi')}% | PTAX {indicators.get('ptax_venda')}\n"
         summary_text += "Ativos:\n"
         for item in portfolio_summary:
             pl_pct = item.get('profit_loss_pct', 0.0)
             pl_val = item.get('profit_loss_val', 0.0)
-            summary_text += f"- {item['ticker']} ({item['category']}): R$ {item['value_brl']:.2f} ({item['allocation']:.1f}%) | L/P: {pl_pct:.2f}% (R$ {pl_val:.2f})\n"
+            pe = item.get('pe', 0)
+            roe = item.get('roe', 0)
+            dy = item.get('dy_12m', 0)
+            sector = item.get('sector', 'N/A')
+            rec = item.get('recommendation', 'N/A')
+            
+            summary_text += f"- {item['ticker']} ({item['category']}): R$ {item['value_brl']:.2f} ({item['allocation']:.1f}%) | L/P: {pl_pct:.2f}% (R$ {pl_val:.2f}) | P/L: {pe:.1f} | ROE: {roe:.1f}% | DY: {dy:.1f}% | Setor: {sector} | Rec: {rec}\n"
 
         system_prompt = """
-        Você é um consultor Wealth Management de alta performance. Analise a carteira com base nos dados fornecidos:
+        Você é um **Gestor de Portfólio Sênior (CFA)** e Arquiteto de Investimentos. 
+        Sua missão é analisar a carteira do cliente com profundidade, usando dados fundamentalistas e o contexto de mercado atual.
 
-        Rentabilidade Real: Compare o preço atual com o preço médio (PM). Quais ativos estão carregando a carteira e quais estão drenando?
-        
-        Rebalanceamento Inteligente: Considerando o aporte de R$ 250,00, não sugira apenas comprar o que está "para trás", mas valide se o ativo não perdeu seus fundamentos (ex: HCTR11 caiu muito, vale a pena aportar ou é uma faca caindo?).
-        
-        Consistência: Aponte se a concentração em um único ativo (ex: BBAS3) aumentou ou diminuiu em relação à diversificação ideal.
-        
-        Regras:
-        1. Seja direto e executivo.
-        2. Use os dados de L/P (Lucro/Prejuízo) fornecidos para embasar sua análise.
-        3. Não invente dados.
+        **CONTEXTO DE MERCADO (NOTÍCIAS DE HOJE):**
+        {news_summary}
+
+        **DIRETRIZES DE ANÁLISE:**
+        1.  **Contexto Macro:** Comece explicando brevemente como as notícias de hoje (acima) impactam a carteira (ex: alta de juros impactando FIIs/Varejo).
+        2.  **Análise Fundamentalista:** Não olhe apenas preço. Se um ativo caiu, verifique seus fundamentos (P/L, ROE). 
+            - Exemplo: "A queda de X% em BBAS3 parece injustificada dado seu P/L de Y e ROE de Z%, sugerindo oportunidade."
+            - Exemplo: "A queda em HCTR11 preocupa devido à perda de fundamentos..."
+        3.  **REGRA DE OURO PARA ALOCAÇÃO (RENDA FIXA):**
+            - Se a categoria 'RENDA_FIXA' estiver acima da meta (ex: 40% vs 35%), **NÃO SUGIRA VENDER**. 
+            - Interprete esse excesso como **'Reserva de Oportunidade' (Dry Powder)** para aproveitar quedas na bolsa.
+            - Apenas sugira venda de Renda Fixa se o usuário precisar de liquidez imediata, caso contrário, mantenha.
+            - Sugira venda apenas de ativos de risco (Ações/FIIs) se perderem fundamento ou subiram demais injustificadamente.
+        4.  **Tom de Voz:** Executivo, direto, sofisticado, mas claro. Evite clichês genéricos.
+
+        **DADOS DA CARTEIRA:**
+        {summary_text}
         """
 
-        full_prompt = f"{system_prompt}\n\nDados da Carteira:\n{summary_text}"
+        full_prompt = system_prompt.format(news_summary=news_summary, summary_text=summary_text)
 
         for model_name in self.models_to_try:
             try:
@@ -67,12 +77,9 @@ class AIAnalyst:
                 return response.text
             except Exception as e:
                 logger.error(f"Error generating analysis with {model_name}: {e}")
-                
-                # Log available models to help user debug 404s
                 self._log_available_models()
                 
                 if model_name == self.models_to_try[-1]:
-                    # If this was the last model, return a friendly error
                     logger.error("All AI models failed.")
                     return "Análise de IA temporariamente indisponível. Verifique os logs para detalhes dos modelos acessíveis."
                 else:

@@ -10,48 +10,26 @@ class Settings:
     EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
     EMAIL_RECEIVER = os.getenv("EMAIL_RECEIVER")
 
+import os
+from dotenv import load_dotenv
+
+# Carregar variáveis de ambiente
+load_dotenv()
+
+class Settings:
+    # E-mail (Credenciais carregadas do .env)
+    EMAIL_SENDER = os.getenv("EMAIL_SENDER")
+    EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+    EMAIL_RECEIVER = os.getenv("EMAIL_RECEIVER")
+
     # IA (Gemini)
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
     # App
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
     
-    # Ativos (Mapeamento para Yahoo Finance)
-    ASSETS = {
-        "BR_STOCKS": ["BBAS3.SA", "SAPR3.SA", "SAPR4.SA", "LWSA3.SA"],
-        "FIIS": ["XPML11.SA", "KFOF11.SA", "RBRR11.SA", "HCTR11.SA", "IRDM11.SA", "VINO11.SA"],
-        "ETFS": ["B5P211.SA", "PACB11.SA", "FIXA11.SA", "GOLD11.SA", "XINA11.SA"],
-        "US_REITS": ["O"],
-        "US_STOCKS": ["HPQ"],
-        "CRYPTO": ["USDT-USD"]
-    }
-
-    # Quantidades (Sua Carteira Atual)
-    PORTFOLIO_QTY = {
-        # Ações BR
-        "BBAS3.SA": 37, 
-        "SAPR3.SA": 5, 
-        "SAPR4.SA": 2, 
-        "LWSA3.SA": 1,
-        # FIIs
-        "XPML11.SA": 3,
-        "KFOF11.SA": 3,
-        "RBRR11.SA": 2,
-        "HCTR11.SA": 7,
-        "IRDM11.SA": 2, 
-        "VINO11.SA": 2,
-        # ETFs
-        "B5P211.SA": 2, 
-        "PACB11.SA": 12, 
-        "FIXA11.SA": 5, 
-        "GOLD11.SA": 3, 
-        "XINA11.SA": 1,
-        # Exterior
-        "O": 0.93, 
-        "HPQ": 1.82931885,
-        # Cripto
-        "USDT-USD": 37.94885362
-    }
+    # Google Sheets CSV Link
+    SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQsiq3RTqfKGES0ntzkV_crn8BN43DleBxbpUr-UX32zD28ppyURXLaLnYIGaGmXt1Nvu3jUNsdjmiK/pub?gid=0&single=true&output=csv"
     
     # Alocação Ideal Atualizada
     TARGET_ALLOCATION = {

@@ -8,69 +8,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 class PortfolioManager:
-    def __init__(self, market_data, indicators):
+    def __init__(self, portfolio_data, market_data, indicators):
+        self.portfolio_data = portfolio_data
         self.market_data = market_data
         self.indicators = indicators
         self.target_alloc = Settings.TARGET_ALLOCATION
-        self.portfolio_file = "data/portfolio.json"
         
         # Ensure data dir exists
         os.makedirs("data", exist_ok=True)
-
-    def _load_portfolio_data(self):
-        """Loads portfolio data from JSON file."""
-        try:
-            with open(self.portfolio_file, 'r') as f:
-                return json.load(f)
-        except Exception as e:
-            logger.error(f"Failed to load portfolio.json: {e}")
-            return []
-
-    def _get_rdb_value(self):
-        """Calculates updated RDB value based on CDI."""
-        # Using a separate state file for RDB since it's a simulated fixed income asset
-        rdb_state_file = "data/rdb_state.json"
-        
-        default_state = {
-            "rdb_value": 1000.00, # Placeholder
-            "last_update": datetime.now().strftime("%Y-%m-%d")
-        }
-        
-        if os.path.exists(rdb_state_file):
-            with open(rdb_state_file, 'r') as f:
-                state = json.load(f)
-        else:
-            state = default_state
-            with open(rdb_state_file, 'w') as f:
-                json.dump(state, f)
-        
-        last_date = datetime.strptime(state["last_update"], "%Y-%m-%d")
-        today = datetime.now()
-        
-        if today.date() > last_date.date():
-            # Get CDI daily rate (approx from Selic Meta)
-            selic_meta = self.indicators.get('selic_meta', 11.75) 
-            cdi_yearly = selic_meta - 0.10
-            # Daily factor (1 + CDI)^(1/252) - 1
-            # RDB is 115% of CDI
-            daily_cdi = (1 + cdi_yearly/100)**(1/252) - 1
-            daily_rdb = daily_cdi * 1.15
-            
-            days_diff = (today - last_date).days 
-            # Ideally we check business days. For MVP, assuming every weekday run.
-            
-            # Update value
-            new_value = state["rdb_value"] * ((1 + daily_rdb) ** days_diff) 
-            
-            state["rdb_value"] = new_value
-            state["last_update"] = today.strftime("%Y-%m-%d")
-            
-            with open(rdb_state_file, 'w') as f:
-                json.dump(state, f)
-                
-            return new_value
-        else:
-            return state["rdb_value"]
 
     def _load_history(self):
         """Loads history data from JSON file."""
@@ -112,39 +57,65 @@ class PortfolioManager:
             logger.error(f"Failed to save history.json: {e}")
 
     def calculate_portfolio(self):
-        portfolio_items = self._load_portfolio_data()
         portfolio = []
         total_value = 0
         
-        # 1. Process Tickers
-        for item in portfolio_items:
+        # 1. Process Tickers from Sheet Data
+        for item in self.portfolio_data:
             ticker = item['ticker']
-            qty = item['qty']
-            avg_price = item.get('avg_price', 0.0)
+            qty = item['quantity'] # Note: key is 'quantity' from SheetsManager, not 'qty'
             category = item.get('category', 'OUTROS')
             
+            # Market Data
             data = self.market_data.get(ticker, {})
             current_price = data.get('price', 0)
             
-            # Currency Conversion
-            # If category is Crypto or ticker ends with -USD, convert to BRL
-            if category in ["US_REITS", "US_STOCKS", "CRYPTO"] or ticker.endswith("-USD"):
-                usd_rate = self.market_data.get('BRL=X', {}).get('price', 5.0)
-                if usd_rate == 0: usd_rate = 5.0 # Fallback
+            # --- LOGIC CORRECTIONS ---
+            
+            # 1. Renda Fixa: Value = Qty * 1.0
+            if category == "RENDA_FIXA":
+                value_brl = qty * 1.0
+                current_price = 1.0
+                avg_price_brl = 0 # Not tracking avg price for RF yet
                 
-                # If it's already in BRL (like USDT-BRL), don't multiply
+            # 2. Crypto Logic
+            elif category == "CRYPTO":
                 if ticker.endswith("-BRL"):
                     value_brl = current_price * qty
-                    avg_price_brl = avg_price # Assuming avg_price is in BRL for BRL assets
+                    avg_price_brl = 0
                 else:
+                    # USDT-USD, BTC-USD, etc.
+                    usd_rate = self.market_data.get('BRL=X', {}).get('price', 0)
+                    
+                    # Fallback de segurança se o Yahoo falhar no dólar
+                    if usd_rate <= 0:
+                        usd_rate = 6.00 # Taxa aproximada segura
+                        logger.warning("Usando taxa de dólar fallback (6.00) para conversão de cripto.")
+                        
                     value_brl = current_price * qty * usd_rate
-                    avg_price_brl = avg_price * usd_rate # Assuming avg_price is in USD for USD assets
+                    avg_price_brl = 0
+
+            # 3. US Stocks/REITs -> Convert to BRL
+            elif category in ["US_REITS", "US_STOCKS"]:
+                usd_rate = self.market_data.get('BRL=X', {}).get('price', 0)
+                if usd_rate <= 0: 
+                    usd_rate = 6.00
+                    logger.warning("Usando taxa de dólar fallback (6.00) para ativos EUA.")
+                    
+                value_brl = current_price * qty * usd_rate
+                avg_price_brl = 0
+                
+            # 4. Brazilian Assets (Stocks, FIIs, ETFs, BDRs)
             else:
                 value_brl = current_price * qty
-                avg_price_brl = avg_price
-                
-            if current_price == 0:
+                avg_price_brl = 0
+
+            if current_price == 0 and category != "RENDA_FIXA":
                 logger.warning(f"Price for {ticker} is 0. Check data source.")
+
+            # Safety check for NaN
+            if pd.isna(value_brl):
+                value_brl = 0.0
 
             total_value += value_brl
             
@@ -160,45 +131,27 @@ class PortfolioManager:
                 "ticker": ticker,
                 "qty": qty,
                 "price": current_price,
-                "avg_price": avg_price,
                 "value_brl": value_brl,
                 "category": category,
                 "name": data.get('name', ticker),
                 "dy_12m": data.get('dy_12m', 0),
                 "p_vp": data.get('p_vp', 0),
+                "pe": data.get('pe', 0),
+                "roe": data.get('roe', 0),
+                "sector": data.get('sector', 'Unknown'),
+                "recommendation": data.get('recommendation', 'None'),
                 "change_1d": data.get('change_1d', 0),
                 "change_12m": data.get('change_12m', 0),
                 "profit_loss_pct": profit_loss_pct,
                 "profit_loss_val": profit_loss_val
             })
             
-        # 2. Process RDB (Fixed Income)
-        rdb_val = self._get_rdb_value()
-        portfolio.append({
-            "ticker": "RDB Nubank",
-            "qty": 1,
-            "price": rdb_val,
-            "avg_price": 1000.00, # Initial investment placeholder
-            "value_brl": rdb_val,
-            "category": "RENDA_FIXA", # Internal name
-            "name": "RDB Nubank 115% CDI",
-            "dy_12m": 0,
-            "p_vp": 0,
-            "change_1d": 0,
-            "change_12m": 0,
-            "profit_loss_pct": ((rdb_val - 1000)/1000)*100,
-            "profit_loss_val": rdb_val - 1000
-        })
-        total_value += rdb_val
-        
-        # 3. History & Variation
+        # 2. History & Variation
         history = self._load_history()
         daily_variation_pct = 0.0
         
         if history:
-            # Sort by date just in case
             history.sort(key=lambda x: x['date'])
-            # Get last entry that is NOT today
             today = datetime.now().strftime("%Y-%m-%d")
             last_entry = None
             for entry in reversed(history):

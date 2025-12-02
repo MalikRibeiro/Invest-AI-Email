@@ -62,8 +62,14 @@ class ReportGenerator:
         return report
 
     def generate_allocation_chart(self, portfolio_df):
-        # Agrupa por categoria
-        data = portfolio_df.groupby('category')['value_brl'].sum()
+        # Agrupa por categoria e preenche NaNs
+        data = portfolio_df.groupby('category')['value_brl'].sum().fillna(0)
+        
+        # Remove valores zerados ou negativos para o gráfico não quebrar
+        data = data[data > 0]
+        
+        if data.empty:
+            return ""
         
         # Configurações visuais
         colors_list = ['#ff9999','#66b3ff','#99ff99','#ffcc99', '#c2c2f0', '#ffb3e6', '#c4e17f']

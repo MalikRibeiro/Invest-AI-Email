@@ -11,6 +11,7 @@ from src.portfolio import PortfolioManager
 from src.report_generator import ReportGenerator
 from src.notifier import Notifier
 from src.ai_analyst import AIAnalyst
+from src.news_collector import NewsCollector
 
 # Configure Logging
 os.makedirs("logs", exist_ok=True)
@@ -24,16 +25,28 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+from src.sheets_manager import SheetsManager
+
 def job():
     logger.info("Starting daily financial report job...")
     try:
-        # 1. Data Collection
-        collector = DataCollector()
+        # 1. Load Portfolio from Sheets
+        portfolio_data = SheetsManager.get_portfolio_from_sheets()
+        if not portfolio_data:
+            logger.error("Failed to load portfolio data. Aborting.")
+            return
+
+        # 2. Data Collection (Pass portfolio data)
+        collector = DataCollector(portfolio_data)
         market_data = collector.get_market_data()
         indicators = collector.get_economic_indicators()
         
-        # 2. Portfolio Logic
-        manager = PortfolioManager(market_data, indicators)
+        # 2.1 News Collection
+        news_collector = NewsCollector()
+        news_summary = news_collector.get_top_news()
+        
+        # 3. Portfolio Logic (Pass portfolio data & market data)
+        manager = PortfolioManager(portfolio_data, market_data, indicators)
         portfolio_df, total_value, daily_variation_pct = manager.calculate_portfolio()
         suggestions_df = manager.get_rebalancing_suggestions(portfolio_df, total_value)
         contribution_df = manager.suggest_contribution(250.00, suggestions_df)
@@ -41,7 +54,7 @@ def job():
         # 3. AI Analysis
         logger.info("Generating AI Analysis...")
         analyst = AIAnalyst()
-        ai_analysis = analyst.generate_ai_analysis(portfolio_df, total_value, indicators)
+        ai_analysis = analyst.generate_ai_analysis(portfolio_df, total_value, indicators, news_summary)
         
         # 4. Report Generation (Chart only)
         generator = ReportGenerator()
