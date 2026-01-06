@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 class AIAnalyst:
     def __init__(self):
         self.api_key = Settings.GEMINI_API_KEY
-        self.models_to_try = ['gemini-2.5-pro', 'gemini-2.0-flash']
+        self.models_to_try = ['gemini-1.5-pro', 'gemini-1.5-flash']
         
         if self.api_key:
             genai.configure(api_key=self.api_key)
